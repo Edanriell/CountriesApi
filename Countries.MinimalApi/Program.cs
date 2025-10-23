@@ -1,5 +1,6 @@
 ﻿using Azure.Identity;
 using Countries.MinimalApi;
+using Countries.MinimalApi.Extensions;
 using Serilog;
 using Swashbuckle.AspNetCore.SwaggerUI;
 
@@ -18,6 +19,7 @@ if (!string.IsNullOrEmpty(keyVaultUri))
     {
         Console.WriteLine($"Warning: Could not connect to Azure Key Vault: {ex.Message}");
     }
+
 
 builder.Services.AddDatabaseServices(builder.Configuration);
 builder.Services.AddAuthenticationServices();
@@ -38,7 +40,6 @@ app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", "Countries API V1");
     options.SwaggerEndpoint("/swagger/v2/swagger.json", "Countries API V2");
-
     options.DocExpansion(DocExpansion.List);
     options.DisplayRequestDuration();
     options.DefaultModelsExpandDepth(1);
@@ -54,8 +55,8 @@ app.UseRateLimiter();
 app.MapHealthCheckEndpoints();
 app.MapAuthenticationEndpoints();
 app.MapCountryEndpoints();
-app.MapCachedCountryEndpoints();
 app.MapFileEndpoints();
+app.MapCachedCountryEndpoints();
 app.MapStreamingEndpoints();
 app.MapUtilityEndpoints();
 app.MapRateLimitingEndpoints();

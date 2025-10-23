@@ -10,21 +10,29 @@ using Countries.MinimalApi.Models;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Countries.MinimalApi;
+namespace Countries.MinimalApi.Extensions;
 
 public static class EndpointMappingExtensions
 {
     public static WebApplication MapHealthCheckEndpoints(this WebApplication app)
     {
         app.MapHealthChecks("/ready", new HealthCheckOptions
-        {
-            Predicate = healthCheck => healthCheck.Tags.Contains("ready")
-        });
+            {
+                Predicate = healthCheck => healthCheck.Tags.Contains("ready")
+            })
+            .WithTags("Health")
+            .WithGroupName("v1")
+            .WithSummary("Readiness health check")
+            .WithDescription("Checks if the application is ready to accept requests");
 
         app.MapHealthChecks("/live", new HealthCheckOptions
-        {
-            Predicate = healthCheck => healthCheck.Tags.Contains("live")
-        });
+            {
+                Predicate = healthCheck => healthCheck.Tags.Contains("live")
+            })
+            .WithTags("Health")
+            .WithGroupName("v1")
+            .WithSummary("Liveness health check")
+            .WithDescription("Checks if the application is alive and running");
 
         return app;
     }
@@ -32,11 +40,23 @@ public static class EndpointMappingExtensions
     public static WebApplication MapAuthenticationEndpoints(this WebApplication app)
     {
         app.MapGet("/authenticated", () => Results.Ok("Authenticated !"))
-            .RequireAuthorization();
-        // .ExcludeFromDescription();
+            .RequireAuthorization()
+            .WithTags("Authentication")
+            .WithGroupName("v1")
+            .WithSummary("Test authentication")
+            .WithDescription("Requires valid JWT token")
+            .Produces<string>()
+            .Produces(StatusCodes.Status401Unauthorized);
 
         app.MapGet("/authorized", (IUserProfile userProfile) => Results.Ok("Authorized !"))
-            .RequireAuthorization("SurveyCreator");
+            .RequireAuthorization("SurveyCreator")
+            .WithTags("Authentication")
+            .WithGroupName("v1")
+            .WithSummary("Test authorization")
+            .WithDescription("Requires 'SurveyCreator' role")
+            .Produces<string>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
 
         return app;
     }
@@ -302,17 +322,27 @@ public static class EndpointMappingExtensions
                     });
                     return Results.Ok(mapper.Map(countries));
                 })
-            .CacheOutput("5minutes");
+            .CacheOutput("5minutes")
+            .WithTags("Cache")
+            .WithGroupName("v1")
+            .WithSummary("Get output cached countries")
+            .WithDescription("Countries cached for 5 minutes using output cache")
+            .Produces<List<Country>>();
 
         app.MapGet("/cachedinmemorycountries", async (ICountryMapper mapper, ICountryService countryService) =>
-        {
-            var countries = await countryService.GetAllAsync(new PagingDto
             {
-                PageIndex = 1,
-                PageSize = 10
-            });
-            return Results.Ok(mapper.Map(countries));
-        });
+                var countries = await countryService.GetAllAsync(new PagingDto
+                {
+                    PageIndex = 1,
+                    PageSize = 10
+                });
+                return Results.Ok(mapper.Map(countries));
+            })
+            .WithTags("Cache")
+            .WithGroupName("v1")
+            .WithSummary("Get in-memory cached countries")
+            .WithDescription("Countries cached in memory")
+            .Produces<List<Country>>();
 
         return app;
     }
@@ -320,10 +350,15 @@ public static class EndpointMappingExtensions
     public static WebApplication MapStreamingEndpoints(this WebApplication app)
     {
         app.MapGet("/streaming", async (IStreamingService streamingService) =>
-        {
-            var (stream, mimeType) = await streamingService.GetFileStream();
-            return Results.Stream(stream, mimeType, enableRangeProcessing: true);
-        });
+            {
+                var (stream, mimeType) = await streamingService.GetFileStream();
+                return Results.Stream(stream, mimeType, enableRangeProcessing: true);
+            })
+            .WithTags("Streaming")
+            .WithGroupName("v1")
+            .WithSummary("Stream a file")
+            .WithDescription("Stream a file with range processing support for video/audio")
+            .Produces<FileStreamResult>();
 
         return app;
     }
@@ -331,76 +366,146 @@ public static class EndpointMappingExtensions
     public static WebApplication MapUtilityEndpoints(this WebApplication app)
     {
         app.MapGet("/logging", (ILogger<Program> logger) =>
-        {
-            logger.LogInformation("/logging endpoint has been invoked.");
-            return Results.Ok();
-        });
+            {
+                logger.LogInformation("/logging endpoint has been invoked.");
+                return Results.Ok("Logging test successful");
+            })
+            .WithTags("Utilities")
+            .WithGroupName("v1")
+            .WithSummary("Test logging")
+            .WithDescription("Tests Serilog logging functionality")
+            .Produces<string>();
 
         app.MapGet("/cancellable", async (ICountryService countryService, CancellationToken cancellationToken) =>
-        {
-            await countryService.LongRunningQueryAsync(cancellationToken);
-            return Results.Ok();
-        });
+            {
+                await countryService.LongRunningQueryAsync(cancellationToken);
+                return Results.Ok("Query completed");
+            })
+            .WithTags("Utilities")
+            .WithGroupName("v1")
+            .WithSummary("Test cancellation token")
+            .WithDescription("Long running query (10 seconds) that can be cancelled")
+            .Produces<string>();
 
         app.MapGet("/longrunning", async () =>
             {
                 await Task.Delay(5000);
-                return Results.Ok();
+                return Results.Ok("Task completed");
             })
-            .AddEndpointFilter<LogPerformanceFilter>();
+            .AddEndpointFilter<LogPerformanceFilter>()
+            .WithTags("Utilities")
+            .WithGroupName("v1")
+            .WithSummary("Test performance logging")
+            .WithDescription("5 second delay to test performance filter")
+            .Produces<string>();
 
         return app;
     }
 
     public static WebApplication MapRateLimitingEndpoints(this WebApplication app)
     {
-        app.MapGet("/notlimited", () => Results.Ok())
-            .DisableRateLimiting();
+        app.MapGet("/notlimited", () => Results.Ok("Not rate limited"))
+            .DisableRateLimiting()
+            .WithTags("Rate Limiting")
+            .WithGroupName("v1")
+            .WithSummary("Endpoint without rate limiting")
+            .WithDescription("This endpoint bypasses rate limiting")
+            .Produces<string>();
 
-        app.MapGet("/limited", () => Results.Ok())
-            .RequireRateLimiting("ShortLimit");
+        app.MapGet("/limited", () => Results.Ok("Rate limited"))
+            .RequireRateLimiting("ShortLimit")
+            .WithTags("Rate Limiting")
+            .WithGroupName("v1")
+            .WithSummary("Endpoint with rate limiting")
+            .WithDescription("Limited to 2 requests per 15 seconds")
+            .Produces<string>()
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         return app;
     }
 
     public static WebApplication MapExceptionEndpoints(this WebApplication app)
     {
-        app.MapGet("/exception", () => { throw new Exception(); });
-        app.MapGet("/timeout", () => { throw new TimeoutException(); });
+        app.MapGet("/exception", () => { throw new Exception("Test exception"); })
+            .WithTags("Testing")
+            .WithGroupName("v1")
+            .WithSummary("Test exception handling")
+            .WithDescription("Throws a generic exception to test exception handlers")
+            .Produces(StatusCodes.Status500InternalServerError);
+
+        app.MapGet("/timeout", () => { throw new TimeoutException("Test timeout"); })
+            .WithTags("Testing")
+            .WithGroupName("v1")
+            .WithSummary("Test timeout exception")
+            .WithDescription("Throws a timeout exception to test timeout handler")
+            .Produces(StatusCodes.Status408RequestTimeout);
 
         return app;
     }
 
     public static WebApplication MapRoutingExamples(this WebApplication app)
     {
-        app.MapGet("/date/{date}", (DateTime date) => date.ToString());
-        app.MapGet("/uniqueidentifier/{id}", (Guid id) => id.ToString());
-        app.MapGet("/provinces/{provinceId:int:max(12)}", (int provinceId) => $"ProvinceId {provinceId}");
+        app.MapGet("/date/{date}", (DateTime date) => Results.Ok(date.ToString()))
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Date parameter binding example")
+            .Produces<string>();
 
-        app.MapMethods("/users/{userId}", new List<string> { "PUT", "PATCH" }, (HttpRequest request) =>
-        {
-            var id = request.RouteValues["id"];
-            var lastActivityDate = request.Form["lastactivitydate"];
-        });
+        app.MapGet("/uniqueidentifier/{id}", (Guid id) => Results.Ok(id.ToString()))
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("GUID parameter binding example")
+            .Produces<string>();
 
-        app.MapMethods("/routeName", new List<string> { "OPTIONS", "HEAD", "TRACE" }, () =>
-        {
-            // Do action
-        });
+        app.MapGet("/provinces/{provinceId:int:max(12)}", (int provinceId) => Results.Ok($"ProvinceId {provinceId}"))
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Route constraint example")
+            .WithDescription("Province ID must be an integer with max value of 12")
+            .Produces<string>();
 
         return app;
     }
 
     public static WebApplication MapParameterBindingExamples(this WebApplication app)
     {
-        app.MapPost("/Addresses", ([FromBody] Address address) => Results.Created());
+        app.MapPost("/Addresses", ([FromBody] Address address) => Results.Created())
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Body parameter binding example")
+            .Produces(StatusCodes.Status201Created);
+
         app.MapPut("/Addresses/{addressId}",
                 ([FromRoute] int addressId, [FromForm] Address address) => Results.NoContent())
-            .DisableAntiforgery();
-        app.MapGet("/Addresses", ([FromHeader] string coordinates, [FromQuery] int? limitCountSearch) => Results.Ok());
-        app.MapGet("/IdList", ([FromQuery] int[] id) => Results.Ok());
-        app.MapGet("/languages", ([FromHeader(Name = "lng")] string[] lng) => Results.Ok(lng));
-        app.MapGet("/countries/ids", ([FromHeader] CountryIds ids) => Results.NoContent());
+            .DisableAntiforgery()
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Route and form parameter binding example")
+            .Produces(StatusCodes.Status204NoContent);
+
+        app.MapGet("/Addresses", ([FromHeader] string coordinates, [FromQuery] int? limitCountSearch) => Results.Ok())
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Header and query parameter binding example")
+            .Produces(StatusCodes.Status200OK);
+
+        app.MapGet("/IdList", ([FromQuery] int[] id) => Results.Ok(id))
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Array query parameter binding example")
+            .Produces<int[]>();
+
+        app.MapGet("/languages", ([FromHeader(Name = "lng")] string[] lng) => Results.Ok(lng))
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Custom header name binding example")
+            .Produces<string[]>();
+
+        app.MapGet("/countries/ids", ([FromHeader] CountryIds ids) => Results.Ok(ids))
+            .WithTags("Examples")
+            .WithGroupName("v1")
+            .WithSummary("Custom model binding example")
+            .Produces<CountryIds>();
 
         return app;
     }
